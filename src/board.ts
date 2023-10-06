@@ -10,15 +10,18 @@ export type Match<T> = {
   positions: Position[];
 };
 
-export type BoardEvent<T> = undefined;
+export type BoardEvent<T> =
+  | { kind: T }
+  | { kind: T; match: { matched: string; positions: [] } };
 
-export type BoardListener<T> = undefined;
+export type BoardListener<T> = Function;
 
 export class Board<T> {
   readonly width: number;
   readonly height: number;
   readonly seqGen: Generator<T>;
   boardState: T[][];
+  listeners: BoardListener<T>[];
 
   // Constructor here
   constructor(
@@ -34,6 +37,7 @@ export class Board<T> {
 
     // Create empty Board
     this.boardState = [];
+    this.listeners = [];
 
     // Populate Board
     for (let c = 0; c < this.height; c++) {
@@ -49,7 +53,9 @@ export class Board<T> {
     }
   }
 
-  addListener(listener: BoardListener<T>) {}
+  addListener(listener: BoardListener<T>) {
+    this.listeners.push(listener);
+  }
 
   positions(): Position[] {
     //Create empty array
@@ -60,7 +66,7 @@ export class Board<T> {
       //Runs through x-axis
       for (let c = 0; c < this.width; c++) {
         //Adding each position
-        positions.push({ row: r, col: c});
+        positions.push({ row: r, col: c });
       }
     }
 
@@ -69,22 +75,35 @@ export class Board<T> {
   }
 
   piece(p: Position): T | undefined {
+    // Somehow return the piece on the position
+    return this.getPieceFromBoard(this.boardState, p);
+  }
+
+  // HELPER METHOD
+  getPieceFromBoard(board: T[][], p: Position): T | undefined {
     // Check if Out Of Bounds
     if (0 > p.col || p.col >= this.width || 0 > p.row || p.row >= this.height)
       return undefined;
 
-    // Somehow return the piece on the position
-    return this.boardState[p.row][p.col];
+    return board[p.row][p.col];
   }
 
   canMove(first: Position, second: Position): boolean {
     // Check for Illegal Moves
-    if (this.anyIllegalMoves(first, second)) return false
+    if (this.anyIllegalMoves(first, second)) return false;
 
     // Check if anything matches
-    const simulatedBoard = this.simulateSwap(first, second)
-    const matchOnFirst = this.anyMatching(simulatedBoard, first, this.piece(second))
-    const matchOnSecond = this.anyMatching(simulatedBoard, second, this.piece(first))
+    const simulatedBoard = this.simulateSwap(first, second);
+    const matchOnFirst = this.anyMatching(
+      simulatedBoard,
+      first,
+      this.piece(second)
+    );
+    const matchOnSecond = this.anyMatching(
+      simulatedBoard,
+      second,
+      this.piece(first)
+    );
 
     // Return True if any matches are found, False otherwise
     return matchOnFirst || matchOnSecond;
@@ -111,63 +130,76 @@ export class Board<T> {
     const diff_sum = c_diff + r_diff;
 
     // If diff_sum != -1 OR 1 -> False
-    if (diff_sum != -1 && diff_sum != 1) return true;
-    /*
-          if(c_diff > 1 || -1 > c_diff) return false
-          if(r_diff > 1 || -1 > r_diff) return false
-          if(c_diff == 0 && r_diff == 0) return false
-        */
+    // if (diff_sum != -1 && diff_sum != 1) return true;
+
+    // if(c_diff > 1 || -1 > c_diff) return true
+    // if(r_diff > 1 || -1 > r_diff) return true
+
+    if (c_diff == 0 && r_diff == 0) return true;
 
     // Default Case
     return false;
   }
 
-  anyMatching(board: T[][], p: Position, reference_char:T): boolean {
-    let in_a_row = 0;
+  // Recursion using a Vector to add more general checks
+  anyMatching(board: T[][], p: Position, reference: T): boolean {
+    // Reference Vectors
+    const north = { row: -1, col: 0 };
+    const east = { row: 0, col: 1 };
+    const south = { row: 1, col: 0 };
+    const west = { row: 0, col: -1 };
 
-    // Check for a match in the Col
-    for (let col = p.col - 2; col <= p.col + 2; col++) {
-      if (col == p.col||this.piece({ row: p.row, col: col }) == reference_char) {
-        in_a_row++;
-
-        // Return if a Match is found
-        if(in_a_row === 3) return true
-      } else {
-        in_a_row = 0;
-      }
+    if (
+      this.checkNext(board, p, north, reference) +
+        this.checkNext(board, p, south, reference) >=
+      2
+    ) {
+      return true;
     }
 
-    // Reset counter
-    in_a_row = 0
-
-    // Check for a match in the ROW
-    for (let row = p.row - 2; row <= p.row + 2; row++) {
-      if (row == p.row||this.piece({ row: row, col: p.col }) == reference_char) {
-        in_a_row++;
-
-        // Return if a Match is found
-        if(in_a_row === 3) return true
-      } else {
-        in_a_row = 0;
-      }
+    if (
+      this.checkNext(board, p, east, reference) +
+        this.checkNext(board, p, west, reference) >=
+      2
+    ) {
+      return true;
     }
 
     // Default Case / No Match Found
     return false;
   }
 
-  simulateSwap(first: Position, second: Position): T[][]{
+  checkNext(
+    board: T[][],
+    currentPosition: Position,
+    direction: Position,
+    reference: T
+  ): number {
+    const newPos: Position = {
+      row: currentPosition.row + direction.row,
+      col: currentPosition.col + direction.col,
+    };
+    const piece = this.getPieceFromBoard(board, newPos);
+
+    if (piece == reference) {
+      return 1 + this.checkNext(board, newPos, direction, reference);
+    } else {
+      return 0;
+    }
+  }
+
+  simulateSwap(first: Position, second: Position): T[][] {
     // Copy Board
-    let copy = this.boardState.map((arr) => arr.slice())
-    let new_first = this.piece(second)
-    let new_second = this.piece(first)
+    let copy = this.boardState.map((arr) => arr.slice());
+    let new_first = this.piece(second);
+    let new_second = this.piece(first);
 
     // Swap
     copy[first.row][first.col] = new_first;
     copy[second.row][second.col] = new_second;
 
     // Return Copy
-    return copy
+    return copy;
   }
 
   // From OLE
