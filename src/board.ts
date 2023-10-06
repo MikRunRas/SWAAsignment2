@@ -82,10 +82,61 @@ export class Board<T> {
     }
 
     canMove(first: Position, second: Position): boolean {
+        if(this.anyIllegalMoves(first, second)) return false
+
+        
+
+        return true
+    }
+
+    anyIllegalMoves(first:Position, second:Position): boolean{
+        // use Piece to check OOB
+        if (this.piece(first) == undefined || 
+            this.piece(second) == undefined)
+            return true
+
+        // Extract Columns and Rows
+        const c1 = first.col, c2=second.col, r1=first.row, r2=second.row
+        
+        // Return true if not in a Cardinal Direction
+        if(c1 != c2 && r1 != r2) return true
+
+        // Calculate Difference between Columns && Rows && Magic (Maths)
+        const c_diff = c1 - c2, r_diff = r1 - r2
+        const diff_sum = c_diff + r_diff
+        
+        // If diff_sum != -1 OR 1 -> False
+        if(diff_sum != -1 && diff_sum != 1) return true
+        /*
+          if(c_diff > 1 || -1 > c_diff) return false
+          if(r_diff > 1 || -1 > r_diff) return false
+          if(c_diff == 0 && r_diff == 0) return false
+        */
+
+       // Default Case
+       return false
+    }
+
+    anyMatching(p: Position):boolean{
+        // Get Reference Char
+        const reference_char = this.piece(p)
+
+
+        for(let col = p.col-2; col <= p.col+2; col++){
+
+        }
+        
+        // Default Casse
         return false
     }
 
     move(first: Position, second: Position) {
-        //DoNothing
+        // Return if not allowed
+        if(!this.canMove(first, second)) return
+        
+        // Get temporary piece for Swap
+        let temp = this.piece(first)
+        this.boardState[first.row][first.col] = this.piece(second)
+        this.boardState[second.row][second.col] = temp
     }
 }
