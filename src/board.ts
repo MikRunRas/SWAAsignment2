@@ -175,12 +175,16 @@ export class Board<T> {
     direction: Position,
     reference: T
   ): number {
+    // Calculate the next position
     const newPos: Position = {
       row: currentPosition.row + direction.row,
       col: currentPosition.col + direction.col,
     };
+
+    // Get the Piece
     const piece = this.getPieceFromBoard(board, newPos);
 
+    // Check if Piece is the correct Piece
     if (piece == reference) {
       return 1 + this.checkNext(board, newPos, direction, reference);
     } else {
