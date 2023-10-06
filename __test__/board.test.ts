@@ -89,10 +89,10 @@ describe("Board", () => {
 
         it("contains the generated elements", () => {
             expect(board.piece({row: 0, col: 0})).toEqual('A')
-            expect(board.piece({row: 1, col: 1})).toEqual('A')
             expect(board.piece({row: 0, col: 1})).toEqual('B')
-            expect(board.piece({row: 2, col: 0})).toEqual('B')
             expect(board.piece({row: 1, col: 0})).toEqual('C')
+            expect(board.piece({row: 1, col: 1})).toEqual('A')
+            expect(board.piece({row: 2, col: 0})).toEqual('B')
             expect(board.piece({row: 2, col: 1})).toEqual('C')
         })
 
