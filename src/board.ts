@@ -33,16 +33,16 @@ export class Board<T> {
         this.boardState = []
         
         // Populate Board
-        for (let r = 0; r < this.height; r++) {
-            let row: T[] = []
+        for (let c = 0; c < this.height; c++) {
+            let temp_col: T[] = []
             // Runs through x-axis
-            for (let c = 0; c < this.width; c++) {
+            for (let r = 0; r < this.width; r++) {
                 // Adding Piece to Row
-                row.push(this.seqGen.next())
+                temp_col.push(this.seqGen.next())
             }
 
             // Add Row to State
-            this.boardState.push(row)
+            this.boardState.push(temp_col)
         }
         
 
@@ -67,16 +67,18 @@ export class Board<T> {
             }
         }
 
+        // Return
         return positions
     }
 
     piece(p: Position): T | undefined {
-        if (0 > p.col || p.col > this.width ||
-            0 > p.row || p.row > this.height)
+        // Check if Out Of Bounds
+        if (0 > p.col || p.col >= this.width ||
+            0 > p.row || p.row >= this.height)
             return undefined
-        return this.boardState[p.col][p.row]
-        //Somehow return the piece on the position
-        //return position.piece
+            
+            // Somehow return the piece on the position
+            return this.boardState[p.row][p.col]
     }
 
     canMove(first: Position, second: Position): boolean {
