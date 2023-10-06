@@ -82,13 +82,15 @@ export class Board<T> {
     if (this.anyIllegalMoves(first, second)) return false
 
     // Check if anything matches
-    const matchOnFirst = this.anyMatching(first)
-    const matchOnSecond = this.anyMatching(second)
+    const simulatedBoard = this.simulateSwap(first, second)
+    const matchOnFirst = this.anyMatching(simulatedBoard, first, this.piece(second))
+    const matchOnSecond = this.anyMatching(simulatedBoard, second, this.piece(first))
 
     // Return True if any matches are found, False otherwise
     return matchOnFirst || matchOnSecond;
   }
 
+  // Helper Methods
   anyIllegalMoves(first: Position, second: Position): boolean {
     // use Piece to check OOB
     if (this.piece(first) == undefined || this.piece(second) == undefined)
@@ -120,14 +122,12 @@ export class Board<T> {
     return false;
   }
 
-  anyMatching(p: Position): boolean {
-    // Get Reference Character
-    const reference_char = this.piece(p);
+  anyMatching(board: T[][], p: Position, reference_char:T): boolean {
     let in_a_row = 0;
 
-    // Check for a match in the Row
+    // Check for a match in the Col
     for (let col = p.col - 2; col <= p.col + 2; col++) {
-      if (this.piece({ row: p.row, col: col }) == reference_char) {
+      if (col == p.col||this.piece({ row: p.row, col: col }) == reference_char) {
         in_a_row++;
 
         // Return if a Match is found
@@ -140,9 +140,9 @@ export class Board<T> {
     // Reset counter
     in_a_row = 0
 
-    // Check for a match in the Column
-    for (let row = p.col - 2; row <= p.col + 2; row++) {
-      if (this.piece({ row: row, col: p.col }) == reference_char) {
+    // Check for a match in the ROW
+    for (let row = p.row - 2; row <= p.row + 2; row++) {
+      if (row == p.row||this.piece({ row: row, col: p.col }) == reference_char) {
         in_a_row++;
 
         // Return if a Match is found
@@ -156,6 +156,21 @@ export class Board<T> {
     return false;
   }
 
+  simulateSwap(first: Position, second: Position): T[][]{
+    // Copy Board
+    let copy = this.boardState.map((arr) => arr.slice())
+    let new_first = this.piece(second)
+    let new_second = this.piece(first)
+
+    // Swap
+    copy[first.row][first.col] = new_first;
+    copy[second.row][second.col] = new_second;
+
+    // Return Copy
+    return copy
+  }
+
+  // From OLE
   move(first: Position, second: Position) {
     // Return if not allowed
     if (!this.canMove(first, second)) return;
