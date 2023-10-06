@@ -2,7 +2,8 @@ export type Generator<T> = { next: () => T }
 
 export type Position = {
     row: number,
-    col: number
+    col: number,
+    piece: any
 }
 
 export type Match<T> = {
@@ -62,7 +63,7 @@ export class Board<T> {
             //Runs through x-axis
             for (let c = 0; c < this.width; c++) {
                 //Adding each position
-                positions.push({ row: r, col: c })
+                positions.push({ row: r, col: c, piece: undefined })
             }
         }
 
@@ -70,7 +71,12 @@ export class Board<T> {
     }
 
     piece(p: Position): T | undefined {
+        if (0 > p.col || p.col > this.width ||
+            0 > p.row || p.row > this.height)
+            return undefined
         return this.boardState[p.col][p.row]
+        //Somehow return the piece on the position
+        //return position.piece
     }
 
     canMove(first: Position, second: Position): boolean {
