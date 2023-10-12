@@ -1,3 +1,5 @@
+import { parseSync } from "@babel/core";
+
 export type Generator<T> = { next: () => T };
 
 export type Position = {
@@ -20,6 +22,7 @@ export class Board<T> {
   readonly width: number;
   readonly height: number;
   readonly seqGen: Generator<T>;
+  readonly matchLimit = 3;
 
   boardState: T[][] = []; // Board[Row][Col]
   listeners: BoardListener<T>[] = [];
@@ -31,6 +34,7 @@ export class Board<T> {
     width: number = 3,
     height: number = 3
   ) {
+    // Size of the Board
     this.width = width;
     this.height = height;
 
@@ -105,7 +109,7 @@ export class Board<T> {
   }
 
   // Helper Methods
-  anyIllegalMoves(
+  private anyIllegalMoves(
     first: Position = this.movedPieces[0],
     second: Position = this.movedPieces[1]
   ): boolean {
@@ -144,7 +148,7 @@ export class Board<T> {
    * @param p Position to check from
    * @returns `true` if a Match is found, `false` otherwise
    */
-  anyMatching(b: T[][], p: Position): boolean {
+  private anyMatching(b: T[][], p: Position): boolean {
     // Reference Vectors
     const [n, e, s, w] = [
       { row: -1, col: 0 },
@@ -161,12 +165,20 @@ export class Board<T> {
       matchH = false;
 
     // Check for Matches on the Horizontal axis
-    matchH = this.checkNext(b, p, e, ref) + this.checkNext(b, p, w, ref) >= 2;
+    matchH =
+      1 + this.checkNext(b, p, e, ref) + this.checkNext(b, p, w, ref) >=
+      this.matchLimit;
 
     // Check for Matches on the Vertical axis
-    matchV = this.checkNext(b, p, n, ref) + this.checkNext(b, p, s, ref) >= 2;
+    matchV =
+      1 + this.checkNext(b, p, n, ref) + this.checkNext(b, p, s, ref) >=
+      this.matchLimit;
 
     return matchH || matchV;
+  }
+
+  private checkEntireBoard() {
+    // To Be Implemented
   }
 
   /**
@@ -197,24 +209,18 @@ export class Board<T> {
       return a.col - b.col;
     });
 
-    const firstInMatch = positions[0];
-    const reference = this.boardState[firstInMatch.row][firstInMatch.col];
+    // Get Reference Piece from first position
+    const pos_0 = positions[0];
+    const ref = this.boardState[pos_0.row][pos_0.col];
 
     // Create Event
     const event: BoardEvent<T> = {
       kind: "Match",
-      match: { matched: reference, positions: positions },
+      match: { matched: ref, positions: positions },
     };
 
     // Fire Event
-    this.listeners.forEach((listener) => {
-      listener(event);
-    });
-
-    // Remove / Repopulate positions
-    // this.positionsOfMatch.forEach((p) => {
-    //   this.boardState[p.row][p.col] = this.seqGen.next();
-    // });
+    this.listeners.forEach((l) => l(event));
   }
 
   private checkNext(
@@ -285,7 +291,10 @@ export class Board<T> {
     return copy;
   }
 
-  private findMatches(p: Position): Position[] {
+  private findMatches(
+    p: Position,
+    direction: "Horiztonal" | "Vertical" // | "Both"
+  ): Position[] {
     // Reference Vectors
     const [n, e, s, w] = [
       { row: -1, col: 0 },
@@ -299,8 +308,10 @@ export class Board<T> {
     // Get the Reference Piece
     const ref = this.getFromBoard(p, b);
 
+    // Tracking Arrays
     var trackH: Set<Position> = new Set();
     var trackV: Set<Position> = new Set();
+
     // Check for Matches on the Horizontal axis
     this.getNext(b, p, e, ref, trackH);
     this.getNext(b, p, w, ref, trackH);
@@ -309,11 +320,30 @@ export class Board<T> {
     this.getNext(b, p, n, ref, trackV);
     this.getNext(b, p, s, ref, trackV);
 
-    // Return longest array | CHANGE THIS LATER
-    return trackH.size > trackV.size ? [...trackH] : [...trackV];
+    // Return requested Array
+    switch (direction) {
+      case "Horiztonal":
+        return [...trackH];
+      case "Vertical":
+        return [...trackV];
+      // case "Both":
+      default:
+      // return {V: [...trackV], H: [...trackH] };
+    }
   }
 
-  // 
+  /**
+   * Filters the Lists of Matches to and then fires events for those of length high enough for the Match Limit
+   *
+   * @param matches Lists of Matches
+   */
+  private fireMatchEvents(matches: Position[][]) {
+    matches
+      .filter((m) => m.length >= this.matchLimit)
+      .forEach((m) => this.fireMatchEvent(m));
+  }
+
+  //
   move(first: Position, second: Position) {
     // Return if not allowed
     if (!this.canMove(first, second)) return;
@@ -323,19 +353,33 @@ export class Board<T> {
     this.boardState[first.row][first.col] = this.piece(second);
     this.boardState[second.row][second.col] = temp;
 
-    const matchesForFirst = this.findMatches(first);
-    const matchesForSecond = this.findMatches(second);
+    // Get the Horizontal & Vertical Matches
+    const matches = [
+      this.findMatches(first, "Horiztonal"),
+      this.findMatches(first, "Vertical"),
+      this.findMatches(second, "Horiztonal"),
+      this.findMatches(second, "Vertical"),
+    ];
 
-    // Fire Match Event
-    if (matchesForFirst.length > 2) {
-      this.fireMatchEvent(matchesForFirst);
-    }
+    // Fire the Matches events
+    this.fireMatchEvents(matches);
+    this.removeMatches(matches);
 
-    if (matchesForSecond.length > 2) {
-      this.fireMatchEvent(matchesForSecond);
-    }
-
-    // Send Refill
+    // Refill Event
     this.listeners.forEach((l) => l({ kind: "Refill" }));
+    this.refillBoard();
+  }
+
+  private refillBoard() {
+    // Ville være nemmest hvis der blev byttet rundt, så vi har BoardState[Column][Row]
+    // da vi ville kunne bare fjerne alle Undefined i en Column, og så Push nye værdier
+    // throw new Error("Not Yet Implemented");
+  }
+
+  private removeMatches(matches: Position[][]) {
+    matches
+      .filter((m) => m.length >= this.matchLimit)
+      .forEach((m) => m.forEach((m) => (this.boardState[m.row][m.col] = undefined))
+      );
   }
 }
