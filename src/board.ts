@@ -12,7 +12,7 @@ export type Match<T> = {
 
 export type BoardEvent<T> =
   | { kind: "Refill" }
-  | { kind: "Match"; match: { matched: T; positions: Position[] } };
+  | { kind: "Match"; match: Match<T> };
 
 export type BoardListener<T> = Function;
 
@@ -201,8 +201,11 @@ export class Board<T> {
       match: { matched: reference, positions: matchPositions },
     };
 
-    // Do the Event stuff
-    this.listeners.forEach((listener) => listener(event));
+    // Fire Event
+    this.listeners.forEach((listener) => {
+      listener(event);
+      listener({kind: "Refill"})
+    });
   }
 
   private checkNext(
