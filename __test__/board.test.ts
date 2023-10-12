@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from '@jest/globals'
-import { Generator, Position, Board, BoardEvent } from '../src/board'
+import { Generator, Position, Board, BoardEvent } from '../src/board copy'
 
 class CyclicGenerator implements Generator<string> {
     private sequence: string

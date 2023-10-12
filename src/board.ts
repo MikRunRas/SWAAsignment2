@@ -20,8 +20,10 @@ export class Board<T> {
   readonly width: number;
   readonly height: number;
   readonly seqGen: Generator<T>;
+
   boardState: T[][]; // Board[Row][Col]
   listeners: BoardListener<T>[];
+  movedPieces: Position[];
 
   // Constructor here
   constructor(
@@ -89,11 +91,13 @@ export class Board<T> {
   }
 
   canMove(first: Position, second: Position): boolean {
+    this.movedPieces = [first, second];
     // Check for Illegal Moves
-    if (this.anyIllegalMoves(first, second)) return false;
+    if (this.anyIllegalMoves()) return false;
 
     // Check if anything matches
     const simulatedBoard = this.simulateSwap(first, second);
+
     const matchOnFirst = this.anyMatching(
       simulatedBoard,
       first,
@@ -110,7 +114,10 @@ export class Board<T> {
   }
 
   // Helper Methods
-  anyIllegalMoves(first: Position, second: Position): boolean {
+  anyIllegalMoves(
+    first: Position = this.movedPieces[0],
+    second: Position = this.movedPieces[1]
+  ): boolean {
     // use Piece to check OOB
     if (this.piece(first) == undefined || this.piece(second) == undefined)
       return true;
@@ -127,7 +134,7 @@ export class Board<T> {
     // Calculate Difference between Columns && Rows && Magic (Maths)
     const c_diff = c1 - c2,
       r_diff = r1 - r2;
-    const diff_sum = c_diff + r_diff;
+    // const diff_sum = c_diff + r_diff;
 
     // If diff_sum != -1 OR 1 -> False
     // if (diff_sum != -1 && diff_sum != 1) return true;
@@ -135,44 +142,35 @@ export class Board<T> {
     // if(c_diff > 1 || -1 > c_diff) return true
     // if(r_diff > 1 || -1 > r_diff) return true
 
-    if (c_diff == 0 && r_diff == 0) return true;
-
-    // Default Case
-    return false;
+    // True if First and Second is the same
+    return c_diff == 0 && r_diff == 0;
   }
 
   // Recursion using a Vector to add more general checks
-  anyMatching(board: T[][], p: Position, reference: T): boolean {
+  anyMatching(board: T[][], position: Position, referencePiece: T): boolean {
     // Reference Vectors
-    const north = { row: -1, col: 0 };
-    const east = { row: 0, col: 1 };
-    const south = { row: 1, col: 0 };
-    const west = { row: 0, col: -1 };
+    const [north, east, south, west] = [
+      { row: -1, col: 0 },
+      { row: 0, col: 1 },
+      { row: 1, col: 0 },
+      { row: 0, col: -1 },
+    ];
 
-    // Match Positions
-    let matchPositions: Position[] = [];
     let foundMatch = false;
 
     if (
-      this.checkNext(board, p, east, reference, matchPositions) +
-        this.checkNext(board, p, west, reference, matchPositions) >=
+      this.checkNext(board, position, east, referencePiece) +
+        this.checkNext(board, position, west, referencePiece) >=
       2
     ) {
-      // Add reference position to the Array
-      this.FireMatchEvent(matchPositions, p, reference);
       foundMatch = true;
     }
 
-    // Reset array
-    matchPositions = [];
-
     if (
-      this.checkNext(board, p, north, reference, matchPositions) +
-        this.checkNext(board, p, south, reference, matchPositions) >=
+      this.checkNext(board, position, north, referencePiece) +
+        this.checkNext(board, position, south, referencePiece) >=
       2
     ) {
-      // Add reference position to the Array
-      this.FireMatchEvent(matchPositions, p, reference);
       foundMatch = true;
     }
 
@@ -180,45 +178,41 @@ export class Board<T> {
     return foundMatch;
   }
 
-  private FireMatchEvent(
-    matchPositions: Position[],
-    p: Position,
-    reference: T
-  ) {
-    matchPositions.push(p);
-
+  private fireMatchEvent() {
     // Sort the positions by Col and Row values
-    matchPositions.sort((a, b) => {
-      if (a.col === b.col) {
-        return a.row - b.row;
-      }
-      return a.col - b.col;
-    });
+    // this.positionsOfMatch.sort((a, b) => {
+    //   if (a.col === b.col) {
+    //     return a.row - b.row;
+    //   }
+    //   return a.col - b.col;
+    // });
+
+    // const firstInMatch = this.positionsOfMatch[0];
+    // const reference = this.boardState[firstInMatch.row][firstInMatch.col];
 
     // Create Event
-    let event: BoardEvent<T> = {
-      kind: "Match",
-      match: { matched: reference, positions: matchPositions },
-    };
+    // const event: BoardEvent<T> = {
+    //   kind: "Match",
+    //   match: { matched: reference, positions: this.positionsOfMatch },
+    // };
 
     // Fire Event
     this.listeners.forEach((listener) => {
-      listener(event);
+      // listener(event);
       listener({ kind: "Refill" });
     });
 
     // Remove / Repopulate positions
-    matchPositions.forEach((p) => {
-      return (this.boardState[p.row][p.col] = this.seqGen.next());
-    });
+    // this.positionsOfMatch.forEach((p) => {
+    //   this.boardState[p.row][p.col] = this.seqGen.next();
+    // });
   }
 
   private checkNext(
     board: T[][],
     currentPosition: Position,
     direction: Position,
-    reference: T,
-    positionArray
+    reference: T
   ): number {
     // Calculate the next position
     const newPos: Position = {
@@ -231,12 +225,8 @@ export class Board<T> {
 
     // Check if Piece is the correct Piece
     if (piece == reference) {
-      // add current checked location to the Array (Keeping track of Matches)
-      positionArray.push(newPos);
       // Return 1 + current amount
-      return (
-        1 + this.checkNext(board, newPos, direction, reference, positionArray)
-      );
+      return 1 + this.checkNext(board, newPos, direction, reference);
     } else {
       return 0;
     }
@@ -261,9 +251,15 @@ export class Board<T> {
     // Return if not allowed
     if (!this.canMove(first, second)) return;
 
+    // var matches = getMatches(first)
+    // var matches = getMatches(second)
+
     // Get temporary piece for Swap
     let temp = this.piece(first);
     this.boardState[first.row][first.col] = this.piece(second);
     this.boardState[second.row][second.col] = temp;
+
+    // Fire Match Event
+    // this.fireMatchEvent();
   }
 }
