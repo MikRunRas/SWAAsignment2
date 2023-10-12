@@ -11,8 +11,8 @@ export type Match<T> = {
 };
 
 export type BoardEvent<T> =
-  | { kind: T }
-  | { kind: T; match: { matched: string; positions: [] } };
+  | { kind: "Refill" }
+  | { kind: "Match"; match: { matched: T; positions: Position[] } };
 
 export type BoardListener<T> = Function;
 
@@ -149,31 +149,68 @@ export class Board<T> {
     const south = { row: 1, col: 0 };
     const west = { row: 0, col: -1 };
 
-    if (
-      this.checkNext(board, p, north, reference) +
-        this.checkNext(board, p, south, reference) >=
-      2
-    ) {
-      return true;
-    }
+    // Match Positions
+    let matchPositions: Position[] = [];
+    let foundMatch = false;
 
     if (
-      this.checkNext(board, p, east, reference) +
-        this.checkNext(board, p, west, reference) >=
+      this.checkNext(board, p, east, reference, matchPositions) +
+        this.checkNext(board, p, west, reference, matchPositions) >=
       2
     ) {
-      return true;
+      // Add reference position to the Array
+      this.FireMatchEvent(matchPositions, p, reference);
+      foundMatch = true;
+    }
+
+    // Reset array
+    matchPositions = [];
+
+    if (
+      this.checkNext(board, p, north, reference, matchPositions) +
+        this.checkNext(board, p, south, reference, matchPositions) >=
+      2
+    ) {
+      // Add reference position to the Array
+      this.FireMatchEvent(matchPositions, p, reference);
+      foundMatch = true;
     }
 
     // Default Case / No Match Found
-    return false;
+    return foundMatch;
   }
 
-  checkNext(
+  private FireMatchEvent(
+    matchPositions: Position[],
+    p: Position,
+    reference: T
+  ) {
+    matchPositions.push(p);
+
+    // Sort the positions by Col and Row values
+    matchPositions.sort((a, b) => {
+      if (a.col === b.col) {
+        return a.row - b.row;
+      }
+      return a.col - b.col;
+    });
+
+    // Create Event
+    let event: BoardEvent<T> = {
+      kind: "Match",
+      match: { matched: reference, positions: matchPositions },
+    };
+
+    // Do the Event stuff
+    this.listeners.forEach((listener) => listener(event));
+  }
+
+  private checkNext(
     board: T[][],
     currentPosition: Position,
     direction: Position,
-    reference: T
+    reference: T,
+    positionArray
   ): number {
     // Calculate the next position
     const newPos: Position = {
@@ -186,13 +223,18 @@ export class Board<T> {
 
     // Check if Piece is the correct Piece
     if (piece == reference) {
-      return 1 + this.checkNext(board, newPos, direction, reference);
+      // add current checked location to the Array (Keeping track of Matches)
+      positionArray.push(newPos);
+      // Return 1 + current amount
+      return (
+        1 + this.checkNext(board, newPos, direction, reference, positionArray)
+      );
     } else {
       return 0;
     }
   }
 
-  simulateSwap(first: Position, second: Position): T[][] {
+  private simulateSwap(first: Position, second: Position): T[][] {
     // Copy Board
     let copy = this.boardState.map((arr) => arr.slice());
     let new_first = this.piece(second);
