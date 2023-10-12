@@ -20,7 +20,7 @@ export class Board<T> {
   readonly width: number;
   readonly height: number;
   readonly seqGen: Generator<T>;
-  boardState: T[][];
+  boardState: T[][]; // Board[Row][Col]
   listeners: BoardListener<T>[];
 
   // Constructor here
@@ -204,7 +204,12 @@ export class Board<T> {
     // Fire Event
     this.listeners.forEach((listener) => {
       listener(event);
-      listener({kind: "Refill"})
+      listener({ kind: "Refill" });
+    });
+
+    // Remove / Repopulate positions
+    matchPositions.forEach((p) => {
+      return (this.boardState[p.row][p.col] = this.seqGen.next());
     });
   }
 
