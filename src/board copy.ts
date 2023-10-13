@@ -75,6 +75,8 @@ export class Board<T> {
         this.boardState[col][row] = nextPiece;
       }
     }
+
+    this.checkEntireBoard();
   }
 
   addListener(listener: BoardListener<T>) {
@@ -119,8 +121,8 @@ export class Board<T> {
     if (this.anyIllegalMoves()) return false;
 
     const simulatedBoard = this.simulateSwap(first, second);
-    const matchOnFirst = this.anyMatching(simulatedBoard, first);
-    const matchOnSecond = this.anyMatching(simulatedBoard, second);
+    const matchOnFirst = this.anyMatching(first, simulatedBoard);
+    const matchOnSecond = this.anyMatching(second, simulatedBoard);
 
     // Return True if any matches are found, False otherwise
     return matchOnFirst || matchOnSecond;
@@ -162,11 +164,11 @@ export class Board<T> {
   /**
    * Recursion using a Vector to add more general checks
    *
-   * @param b Board to check through
    * @param p Position to check from
+   * @param b Board to check through
    * @returns `true` if a Match is found, `false` otherwise
    */
-  private anyMatching(b: T[][], p: Position): boolean {
+  private anyMatching(p: Position, b: T[][] = this.boardState): boolean {
     // Reference Vectors
     const [n, e, s, w]: Position[] = [
       { row: -1, col: 0 },
@@ -195,8 +197,91 @@ export class Board<T> {
     return matchH || matchV;
   }
 
-  private checkEntireBoard() {
-    // To Be Implemented
+  private checkEntireBoard(): void {
+    // Get all Positions
+    let pos = this.positions();
+
+    // Keep track of positions with matches
+    let hasMatch: Position[] = [];
+
+    // Check through positions
+    pos.forEach((p) => {
+      if (this.anyMatching(p)) {
+        hasMatch.push(p);
+      }
+    });
+
+    // Get Matches
+    let matches: Position[][] = [];
+
+    hasMatch.forEach((m) => {
+      // Horizontal Axis
+      let positions = this.findMatches(m, "Horiztonal");
+      matches.push(positions);
+
+      // Vertical Axis
+      positions = this.findMatches(m, "Vertical");
+      matches.push(positions);
+    });
+
+    matches = matches.filter((m) => m.length >= this.matchLimit);
+    matches = this.cleansePositionDoubleArray(matches);
+
+    //
+    this.fireMatchEvents([...matches]);
+  }
+
+  private cleansePositionDoubleArray(arr: Position[][]): Position[][] {
+    function contains(a: Position[], ref: Position): boolean {
+      let copy = a.slice();
+      let count = 0;
+      copy.forEach(
+        (pos) => (count += ref.col == pos.col && ref.row == pos.row ? 1 : 0)
+      );
+      return count > 0;
+    }
+    function equals(a: Position[], b: Position[]): boolean {
+      // Length not the same
+      if (a.length != b.length) return false;
+
+      // Check if B contains all positions in A
+      for (let ref of a) {
+        // return False if B doesn't include all
+        if (!contains(b, ref)) return false;
+      }
+
+      return true;
+    }
+
+    let tmp: Position[][] = arr.slice(0, 1);
+
+    // Sort all Arrays
+    arr.forEach((a) => this.sortPositionArray(a));
+
+    while (arr.length > 0) {
+      // Get the next Column
+      let toCheck = arr.shift();
+      let newEntry = true;
+
+      // Compare with all columns in tmp
+      for (const col of tmp) {
+        if (equals(col, toCheck)) newEntry = false;
+      }
+
+      // Add if entry is new
+      if (newEntry) tmp.push(toCheck);
+    }
+
+    return tmp;
+  }
+
+  private sortPositionArray(arr: Position[]): void {
+    arr.sort((a, b) => {
+      if (a.col === b.col) {
+        return a.row - b.row;
+      }
+      return a.col - b.col;
+    });
   }
 
   /**
@@ -220,12 +305,7 @@ export class Board<T> {
 
   private fireMatchEvent(positions: Position[]) {
     // Sort the positions by Col and Row values
-    positions.sort((a, b) => {
-      if (a.col === b.col) {
-        return a.row - b.row;
-      }
-      return a.col - b.col;
-    });
+    this.sortPositionArray(positions);
 
     // Get Reference Piece from first position
     const pos_0 = positions[0];
@@ -237,8 +317,13 @@ export class Board<T> {
       match: { matched: ref, positions: positions },
     };
 
+    const refill: BoardEvent<T> = { kind: "Refill" };
+
     // Fire Event
-    this.listeners.forEach((l) => l(event));
+    this.listeners.forEach((l) => {
+      l(event);
+      l(refill);
+    });
   }
 
   private checkNext(
@@ -359,6 +444,9 @@ export class Board<T> {
     matches
       .filter((m) => m.length >= this.matchLimit)
       .forEach((m) => this.fireMatchEvent(m));
+
+    // Refill Event
+    this.refillBoard();
   }
 
   //
@@ -382,10 +470,6 @@ export class Board<T> {
     // Fire the Matches events
     this.fireMatchEvents(matches);
     this.removeMatches(matches);
-
-    // Refill Event
-    this.listeners.forEach((l) => l({ kind: "Refill" }));
-    this.refillBoard();
   }
 
   private refillBoard() {
