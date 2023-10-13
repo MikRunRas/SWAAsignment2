@@ -42,20 +42,37 @@ export class Board<T> {
     this.seqGen = sequenceGenerator;
 
     // Populate Board
+    this.createEmptyBoard();
     this.populateBoard();
   }
+  private createEmptyBoard() {
+    // Create an Empty Board
+    this.boardState = [];
 
+    // Add the Columns to the board
+    for (let c = 0; c < this.width; c++) {
+      this.boardState.push([]);
+    }
+
+    // Fill each row, 1 column at a time
+    for (let r = 0; r < this.height; r++) {
+      this.boardState.forEach((c) => {
+        // Adding undefined to Row
+        c.push(undefined);
+      });
+    }
+  }
   private populateBoard() {
-    for (let c = 0; c < this.height; c++) {
-      let temp_col: T[] = [];
-      // Runs through x-axis
-      for (let r = 0; r < this.width; r++) {
-        // Adding Piece to Row
-        temp_col.push(this.seqGen.next());
-      }
+    // Loop through Board State, row -> col, col, [...]
+    for (let row = 0; row < this.height; row++) {
+      for (let col = 0; col < this.width; col++) {
+        // Return if Piece already exists
+        if (this.boardState[col][row] != undefined) return;
 
-      // Add Row to State
-      this.boardState.push(temp_col);
+        // Set the Piece
+        let nextPiece = this.seqGen.next();
+        this.boardState[col][row] = nextPiece;
+      }
     }
   }
 
@@ -68,12 +85,12 @@ export class Board<T> {
     //Create empty array
     let positions: Position[] = [];
 
-    //Runs through y-axis
-    for (let r = 0; r < this.height; r++) {
-      //Runs through x-axis
-      for (let c = 0; c < this.width; c++) {
+    //Runs through x-axis
+    for (let x = 0; x < this.width; x++) {
+      //Runs through y-axis
+      for (let y = 0; y < this.height; y++) {
         //Adding each position
-        positions.push({ row: r, col: c });
+        positions.push({ row: y, col: x });
       }
     }
 
@@ -150,7 +167,7 @@ export class Board<T> {
    */
   private anyMatching(b: T[][], p: Position): boolean {
     // Reference Vectors
-    const [n, e, s, w] = [
+    const [n, e, s, w]: Position[] = [
       { row: -1, col: 0 },
       { row: 0, col: 1 },
       { row: 1, col: 0 },
@@ -197,7 +214,7 @@ export class Board<T> {
       pos.row >= this.height;
 
     // Return Undefined if OOB, otherwise the Piece at position
-    return OOB ? undefined : board[pos.row][pos.col];
+    return OOB ? undefined : board[pos.col][pos.row];
   }
 
   private fireMatchEvent(positions: Position[]) {
@@ -211,7 +228,7 @@ export class Board<T> {
 
     // Get Reference Piece from first position
     const pos_0 = positions[0];
-    const ref = this.boardState[pos_0.row][pos_0.col];
+    const ref = this.boardState[pos_0.col][pos_0.row];
 
     // Create Event
     const event: BoardEvent<T> = {
@@ -231,8 +248,8 @@ export class Board<T> {
   ): number {
     // Calculate the next position
     const newPos: Position = {
-      row: currentPosition.row + direction.row,
       col: currentPosition.col + direction.col,
+      row: currentPosition.row + direction.row,
     };
 
     // Get the Piece
@@ -256,8 +273,8 @@ export class Board<T> {
   ) {
     // Calculate the next position
     const newPos: Position = {
-      row: currentPosition.row + direction.row,
       col: currentPosition.col + direction.col,
+      row: currentPosition.row + direction.row,
     };
 
     // Get the Piece
@@ -284,8 +301,8 @@ export class Board<T> {
     let new_second = this.piece(first);
 
     // Swap
-    copy[first.row][first.col] = new_first;
-    copy[second.row][second.col] = new_second;
+    copy[first.col][first.row] = new_first;
+    copy[second.col][second.row] = new_second;
 
     // Return Copy
     return copy;
@@ -296,7 +313,7 @@ export class Board<T> {
     direction: "Horiztonal" | "Vertical" // | "Both"
   ): Position[] {
     // Reference Vectors
-    const [n, e, s, w] = [
+    const [n, e, s, w]: Position[] = [
       { row: -1, col: 0 },
       { row: 0, col: 1 },
       { row: 1, col: 0 },
@@ -350,8 +367,8 @@ export class Board<T> {
 
     // Get temporary piece for Swap
     let temp = this.piece(first);
-    this.boardState[first.row][first.col] = this.piece(second);
-    this.boardState[second.row][second.col] = temp;
+    this.boardState[first.col][first.row] = this.piece(second);
+    this.boardState[second.col][second.row] = temp;
 
     // Get the Horizontal & Vertical Matches
     const matches = [
@@ -371,15 +388,32 @@ export class Board<T> {
   }
 
   private refillBoard() {
-    // Ville være nemmest hvis der blev byttet rundt, så vi har BoardState[Column][Row]
-    // da vi ville kunne bare fjerne alle Undefined i en Column, og så Push nye værdier
-    // throw new Error("Not Yet Implemented");
+    // Loop through columns by removing the first column, and adding it back on the end
+    for (let i = 0; i < this.boardState.length; i++) {
+      // Get cleaned column
+      let column = this.boardState.shift();
+      column = column.filter(Boolean);
+
+      // Fill column
+      const missing = this.height - column.length;
+      for (let i = missing; i > 0; i--) {
+        column.unshift(undefined);
+      }
+
+      // Add back column
+      this.boardState.push(column);
+    }
+
+    // Add Pieces back
+    this.populateBoard();
+    console.log("DEBUG");
   }
 
   private removeMatches(matches: Position[][]) {
     matches
       .filter((m) => m.length >= this.matchLimit)
-      .forEach((m) => m.forEach((m) => (this.boardState[m.row][m.col] = undefined))
+      .forEach((m) =>
+        m.forEach((m) => (this.boardState[m.col][m.row] = undefined))
       );
   }
 }
