@@ -62,12 +62,13 @@ export class Board<T> {
       });
     }
   }
+
   private populateBoard() {
     // Loop through Board State, row -> col, col, [...]
     for (let row = 0; row < this.height; row++) {
       for (let col = 0; col < this.width; col++) {
         // Return if Piece already exists
-        if (this.boardState[col][row] != undefined) return;
+        if (this.boardState[col][row] !== undefined) continue;
 
         // Set the Piece
         let nextPiece = this.seqGen.next();
@@ -85,10 +86,10 @@ export class Board<T> {
     //Create empty array
     let positions: Position[] = [];
 
-    //Runs through x-axis
-    for (let x = 0; x < this.width; x++) {
-      //Runs through y-axis
-      for (let y = 0; y < this.height; y++) {
+    //Runs through y-axis
+    for (let y = 0; y < this.height; y++) {
+      //Runs through x-axis
+      for (let x = 0; x < this.width; x++) {
         //Adding each position
         positions.push({ row: y, col: x });
       }
