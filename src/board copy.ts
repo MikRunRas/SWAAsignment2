@@ -406,7 +406,6 @@ export class Board<T> {
 
     // Add Pieces back
     this.populateBoard();
-    console.log("DEBUG");
   }
 
   private removeMatches(matches: Position[][]) {
