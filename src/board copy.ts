@@ -75,8 +75,6 @@ export class Board<T> {
         this.boardState[col][row] = nextPiece;
       }
     }
-
-    this.checkEntireBoard();
   }
 
   addListener(listener: BoardListener<T>) {
@@ -240,6 +238,7 @@ export class Board<T> {
       );
       return count > 0;
     }
+
     function equals(a: Position[], b: Position[]): boolean {
       // Length not the same
       if (a.length != b.length) return false;
@@ -324,6 +323,8 @@ export class Board<T> {
       l(event);
       l(refill);
     });
+
+    this.refillBoard();
   }
 
   private checkNext(
@@ -441,12 +442,15 @@ export class Board<T> {
    * @param matches Lists of Matches
    */
   private fireMatchEvents(matches: Position[][]) {
+    if (matches.length == 0) return;
+
     matches
       .filter((m) => m.length >= this.matchLimit)
       .forEach((m) => this.fireMatchEvent(m));
 
-    // Refill Event
-    this.refillBoard();
+    // // Refill Event
+    // this.refillBoard();
+    this.checkEntireBoard();
   }
 
   //
@@ -470,6 +474,7 @@ export class Board<T> {
     // Fire the Matches events
     this.fireMatchEvents(matches);
     this.removeMatches(matches);
+    this.refillBoard();
   }
 
   private refillBoard() {
