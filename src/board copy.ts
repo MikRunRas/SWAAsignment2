@@ -119,7 +119,7 @@ export class Board<T> {
   }
 
   // Helper Methods
-  private createEmptyBoard() {
+  private createEmptyBoard(): void {
     // Create an Empty Board
     this.boardState = [];
 
@@ -137,17 +137,27 @@ export class Board<T> {
     }
   }
 
-  private populateBoard() {
+  private populateBoard(gravity: boolean = false): void {
     // Loop through Board State, row -> col, col, [...]
-    for (let row = 0; row < this.height; row++) {
-      for (let col = 0; col < this.width; col++) {
-        // Return if Piece already exists
-        if (this.boardState[col][row] !== undefined) continue;
-
-        // Set the Piece
-        let nextPiece = this.seqGen.next();
-        this.boardState[col][row] = nextPiece;
+    if (gravity) {
+      for (let row = this.height - 1; row > -1; row--) {
+        this.createRow(row);
       }
+    } else {
+      for (let row = 0; row < this.height; row++) {
+        this.createRow(row);
+      }
+    }
+  }
+
+  private createRow(row: number): void {
+    for (let col = 0; col < this.width; col++) {
+      // Return if Piece already exists
+      if (this.boardState[col][row] !== undefined) continue;
+
+      // Set the Piece
+      let nextPiece = this.seqGen.next();
+      this.boardState[col][row] = nextPiece;
     }
   }
 
@@ -497,7 +507,7 @@ export class Board<T> {
     }
 
     // Add Pieces back
-    this.populateBoard();
+    this.populateBoard(true);
     this.checkEntireBoard();
   }
 
