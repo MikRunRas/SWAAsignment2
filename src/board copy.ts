@@ -1,5 +1,3 @@
-import { parseSync } from "@babel/core";
-
 export type Generator<T> = { next: () => T };
 
 export type Position = {
@@ -44,7 +42,9 @@ export class Board<T> {
     // Populate Board
     this.createEmptyBoard();
     this.populateBoard();
+    this.checkEntireBoard();
   }
+
   private createEmptyBoard() {
     // Create an Empty Board
     this.boardState = [];
@@ -226,7 +226,8 @@ export class Board<T> {
     matches = this.cleansePositionDoubleArray(matches);
 
     //
-    this.fireMatchEvents([...matches]);
+    // this.fireMatchEvents([...matches]);
+    // this.removeMatches(matches)
   }
 
   private cleansePositionDoubleArray(arr: Position[][]): Position[][] {
@@ -447,10 +448,6 @@ export class Board<T> {
     matches
       .filter((m) => m.length >= this.matchLimit)
       .forEach((m) => this.fireMatchEvent(m));
-
-    // // Refill Event
-    // this.refillBoard();
-    this.checkEntireBoard();
   }
 
   //
@@ -496,6 +493,7 @@ export class Board<T> {
 
     // Add Pieces back
     this.populateBoard();
+    
   }
 
   private removeMatches(matches: Position[][]) {
