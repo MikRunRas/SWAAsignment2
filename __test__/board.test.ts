@@ -218,6 +218,7 @@ describe("Board", () => {
             it("fires multiple events when both pieces make new matches", () => {
                 generator.prepare('C', 'D', 'A')
                 generator.prepare('B', 'A', 'B')
+                generator.prepare('B', 'A', 'B') // Generator runs out of Pieces
                 board.move({row: 3, col: 2}, {row: 3, col: 0})
                 expect(events).toContainEqual(
                     {kind: 'Match', match: {matched: 'C', positions: [{row: 1, col: 2}, {row: 2, col: 2}, {row: 3, col: 2}]}}
@@ -281,6 +282,7 @@ describe("Board", () => {
             })
             it("shifts tiles down before replacing multiple matches", () => {
                 generator.prepare('D', 'B', 'C', 'A', 'B', 'A')
+                generator.prepare('D', 'B', 'C', 'A', 'B', 'A') // Generator runs out of Pieces
                 board.move({row: 3, col: 0}, {row: 3, col: 2})
                 require(board).toMatch(
                     '*', 'B', '*',
@@ -298,6 +300,7 @@ describe("Board", () => {
                 )
                 board = new Board(generator, 3, 4)
                 generator.prepare('D', 'C', 'B', 'B', 'A')
+                generator.prepare('D', 'C', 'B', 'B', 'A') // Generator runs out of Pieces
                 board.move({row: 0, col: 1}, {row: 2, col: 1})
                 require(board).toMatch(
                     '*', '*', '*',

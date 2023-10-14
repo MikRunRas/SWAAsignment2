@@ -45,38 +45,6 @@ export class Board<T> {
     this.checkEntireBoard();
   }
 
-  private createEmptyBoard() {
-    // Create an Empty Board
-    this.boardState = [];
-
-    // Add the Columns to the board
-    for (let c = 0; c < this.width; c++) {
-      this.boardState.push([]);
-    }
-
-    // Fill each row, 1 column at a time
-    for (let r = 0; r < this.height; r++) {
-      this.boardState.forEach((c) => {
-        // Adding undefined to Row
-        c.push(undefined);
-      });
-    }
-  }
-
-  private populateBoard() {
-    // Loop through Board State, row -> col, col, [...]
-    for (let row = 0; row < this.height; row++) {
-      for (let col = 0; col < this.width; col++) {
-        // Return if Piece already exists
-        if (this.boardState[col][row] !== undefined) continue;
-
-        // Set the Piece
-        let nextPiece = this.seqGen.next();
-        this.boardState[col][row] = nextPiece;
-      }
-    }
-  }
-
   addListener(listener: BoardListener<T>) {
     this.listeners.push(listener);
   }
@@ -126,7 +94,63 @@ export class Board<T> {
     return matchOnFirst || matchOnSecond;
   }
 
+  //
+  move(first: Position, second: Position) {
+    // Return if not allowed
+    if (!this.canMove(first, second)) return;
+
+    // Get temporary piece for Swap
+    let temp = this.piece(first);
+    this.boardState[first.col][first.row] = this.piece(second);
+    this.boardState[second.col][second.row] = temp;
+
+    // Get the Horizontal & Vertical Matches
+    const matches = [
+      this.findMatches(first, "Horiztonal"),
+      this.findMatches(first, "Vertical"),
+      this.findMatches(second, "Horiztonal"),
+      this.findMatches(second, "Vertical"),
+    ];
+
+    // Fire the Matches events
+    this.fireMatchEvents(matches);
+    this.removeMatches(matches);
+    this.refillBoard();
+  }
+
   // Helper Methods
+  private createEmptyBoard() {
+    // Create an Empty Board
+    this.boardState = [];
+
+    // Add the Columns to the board
+    for (let c = 0; c < this.width; c++) {
+      this.boardState.push([]);
+    }
+
+    // Fill each row, 1 column at a time
+    for (let r = 0; r < this.height; r++) {
+      this.boardState.forEach((c) => {
+        // Adding undefined to Row
+        c.push(undefined);
+      });
+    }
+  }
+
+  private populateBoard() {
+    // Loop through Board State, row -> col, col, [...]
+    for (let row = 0; row < this.height; row++) {
+      for (let col = 0; col < this.width; col++) {
+        // Return if Piece already exists
+        if (this.boardState[col][row] !== undefined) continue;
+
+        // Set the Piece
+        let nextPiece = this.seqGen.next();
+        this.boardState[col][row] = nextPiece;
+      }
+    }
+  }
+
   private anyIllegalMoves(
     first: Position = this.movedPieces[0],
     second: Position = this.movedPieces[1]
@@ -222,12 +246,19 @@ export class Board<T> {
       matches.push(positions);
     });
 
+    // Filter the Matches so it only contains actual matches
     matches = matches.filter((m) => m.length >= this.matchLimit);
+
+    // Return if no Matches are found
+    if (matches.length == 0) return;
+
+    // Remove duplicate entries
     matches = this.cleansePositionDoubleArray(matches);
 
     //
-    // this.fireMatchEvents([...matches]);
-    // this.removeMatches(matches)
+    this.fireMatchEvents([...matches]);
+    this.removeMatches(matches);
+    this.refillBoard();
   }
 
   private cleansePositionDoubleArray(arr: Position[][]): Position[][] {
@@ -301,31 +332,6 @@ export class Board<T> {
 
     // Return Undefined if OOB, otherwise the Piece at position
     return OOB ? undefined : board[pos.col][pos.row];
-  }
-
-  private fireMatchEvent(positions: Position[]) {
-    // Sort the positions by Col and Row values
-    this.sortPositionArray(positions);
-
-    // Get Reference Piece from first position
-    const pos_0 = positions[0];
-    const ref = this.boardState[pos_0.col][pos_0.row];
-
-    // Create Event
-    const event: BoardEvent<T> = {
-      kind: "Match",
-      match: { matched: ref, positions: positions },
-    };
-
-    const refill: BoardEvent<T> = { kind: "Refill" };
-
-    // Fire Event
-    this.listeners.forEach((l) => {
-      l(event);
-      l(refill);
-    });
-
-    this.refillBoard();
   }
 
   private checkNext(
@@ -450,28 +456,27 @@ export class Board<T> {
       .forEach((m) => this.fireMatchEvent(m));
   }
 
-  //
-  move(first: Position, second: Position) {
-    // Return if not allowed
-    if (!this.canMove(first, second)) return;
+  private fireMatchEvent(positions: Position[]) {
+    // Sort the positions by Col and Row values
+    this.sortPositionArray(positions);
 
-    // Get temporary piece for Swap
-    let temp = this.piece(first);
-    this.boardState[first.col][first.row] = this.piece(second);
-    this.boardState[second.col][second.row] = temp;
+    // Get Reference Piece from first position
+    const pos_0 = positions[0];
+    const ref = this.boardState[pos_0.col][pos_0.row];
 
-    // Get the Horizontal & Vertical Matches
-    const matches = [
-      this.findMatches(first, "Horiztonal"),
-      this.findMatches(first, "Vertical"),
-      this.findMatches(second, "Horiztonal"),
-      this.findMatches(second, "Vertical"),
-    ];
+    // Create Event
+    const event: BoardEvent<T> = {
+      kind: "Match",
+      match: { matched: ref, positions: positions },
+    };
 
-    // Fire the Matches events
-    this.fireMatchEvents(matches);
-    this.removeMatches(matches);
-    this.refillBoard();
+    const refill: BoardEvent<T> = { kind: "Refill" };
+
+    // Fire Event
+    this.listeners.forEach((l) => {
+      l(event);
+      l(refill);
+    });
   }
 
   private refillBoard() {
@@ -493,7 +498,7 @@ export class Board<T> {
 
     // Add Pieces back
     this.populateBoard();
-    
+    this.checkEntireBoard();
   }
 
   private removeMatches(matches: Position[][]) {
