@@ -20,10 +20,11 @@ export class Board<T> {
   readonly width: number;
   readonly height: number;
   readonly seqGen: Generator<T>;
+  readonly matchLimit = 3;
 
-  boardState: T[][]; // Board[Row][Col]
-  listeners: BoardListener<T>[];
-  movedPieces: Position[];
+  boardState: T[][] = []; // Board[Row][Col]
+  listeners: BoardListener<T>[] = [];
+  movedPieces: Position[] = [];
 
   // Constructor here
   constructor(
@@ -31,44 +32,34 @@ export class Board<T> {
     width: number = 3,
     height: number = 3
   ) {
+    // Size of the Board
     this.width = width;
     this.height = height;
 
     // Save Sequence Generator
     this.seqGen = sequenceGenerator;
 
-    // Create empty Board
-    this.boardState = [];
-    this.listeners = [];
-
     // Populate Board
-    for (let c = 0; c < this.height; c++) {
-      let temp_col: T[] = [];
-      // Runs through x-axis
-      for (let r = 0; r < this.width; r++) {
-        // Adding Piece to Row
-        temp_col.push(this.seqGen.next());
-      }
-
-      // Add Row to State
-      this.boardState.push(temp_col);
-    }
+    this.createEmptyBoard();
+    this.populateBoard();
+    this.checkEntireBoard();
   }
 
   addListener(listener: BoardListener<T>) {
     this.listeners.push(listener);
   }
 
+  // Creates a List of all Positions possible
   positions(): Position[] {
     //Create empty array
     let positions: Position[] = [];
 
     //Runs through y-axis
-    for (let r = 0; r < this.height; r++) {
+    for (let y = 0; y < this.height; y++) {
       //Runs through x-axis
-      for (let c = 0; c < this.width; c++) {
+      for (let x = 0; x < this.width; x++) {
         //Adding each position
-        positions.push({ row: r, col: c });
+        positions.push({ row: y, col: x });
       }
     }
 
@@ -76,45 +67,101 @@ export class Board<T> {
     return positions;
   }
 
+  // Gets the piece at the given Position
   piece(p: Position): T | undefined {
-    // Somehow return the piece on the position
-    return this.getPieceFromBoard(this.boardState, p);
+    return this.getFromBoard(p, this.boardState);
   }
 
-  // HELPER METHOD
-  getPieceFromBoard(board: T[][], p: Position): T | undefined {
-    // Check if Out Of Bounds
-    if (0 > p.col || p.col >= this.width || 0 > p.row || p.row >= this.height)
-      return undefined;
-
-    return board[p.row][p.col];
-  }
-
+  /**
+   * Checks if the First and Second Position can be swapped around
+   *
+   * @param first First Position
+   * @param second Second Position
+   * @returns True if a Move is allowed
+   */
   canMove(first: Position, second: Position): boolean {
+    // Cache Moved Pieces
     this.movedPieces = [first, second];
-    // Check for Illegal Moves
+
+    // False if any Illegal moves are attempted
     if (this.anyIllegalMoves()) return false;
 
-    // Check if anything matches
     const simulatedBoard = this.simulateSwap(first, second);
-
-    const matchOnFirst = this.anyMatching(
-      simulatedBoard,
-      first,
-      this.piece(second)
-    );
-    const matchOnSecond = this.anyMatching(
-      simulatedBoard,
-      second,
-      this.piece(first)
-    );
+    const matchOnFirst = this.anyMatching(first, simulatedBoard);
+    const matchOnSecond = this.anyMatching(second, simulatedBoard);
 
     // Return True if any matches are found, False otherwise
     return matchOnFirst || matchOnSecond;
   }
 
+  //
+  move(first: Position, second: Position) {
+    // Return if not allowed
+    if (!this.canMove(first, second)) return;
+
+    // Get temporary piece for Swap
+    let temp = this.piece(first);
+    this.boardState[first.col][first.row] = this.piece(second);
+    this.boardState[second.col][second.row] = temp;
+
+    // Get the Horizontal & Vertical Matches
+    const matches = [
+      this.findMatches(first, "Horiztonal"),
+      this.findMatches(first, "Vertical"),
+      this.findMatches(second, "Horiztonal"),
+      this.findMatches(second, "Vertical"),
+    ];
+
+    // Fire the Matches events
+    this.fireMatchEvents(matches);
+    this.removeMatches(matches);
+    this.refillBoard();
+  }
+
   // Helper Methods
-  anyIllegalMoves(
+  private createEmptyBoard(): void {
+    // Create an Empty Board
+    this.boardState = [];
+
+    // Add the Columns to the board
+    for (let c = 0; c < this.width; c++) {
+      this.boardState.push([]);
+    }
+
+    // Fill each row, 1 column at a time
+    for (let r = 0; r < this.height; r++) {
+      this.boardState.forEach((c) => {
+        // Adding undefined to Row
+        c.push(undefined);
+      });
+    }
+  }
+
+  private populateBoard(gravity: boolean = false): void {
+    // Loop through Board State, row -> col, col, [...]
+    if (gravity) {
+      for (let row = this.height - 1; row > -1; row--) {
+        this.createRow(row);
+      }
+    } else {
+      for (let row = 0; row < this.height; row++) {
+        this.createRow(row);
+      }
+    }
+  }
+
+  private createRow(row: number): void {
+    for (let col = 0; col < this.width; col++) {
+      // Return if Piece already exists
+      if (this.boardState[col][row] !== undefined) continue;
+
+      // Set the Piece
+      let nextPiece = this.seqGen.next();
+      this.boardState[col][row] = nextPiece;
+    }
+  }
+
+  private anyIllegalMoves(
     first: Position = this.movedPieces[0],
     second: Position = this.movedPieces[1]
   ): boolean {
@@ -146,66 +193,155 @@ export class Board<T> {
     return c_diff == 0 && r_diff == 0;
   }
 
-  // Recursion using a Vector to add more general checks
-  anyMatching(board: T[][], position: Position, referencePiece: T): boolean {
+  /**
+   * Recursion using a Vector to add more general checks
+   *
+   * @param p Position to check from
+   * @param b Board to check through
+   * @returns `true` if a Match is found, `false` otherwise
+   */
+  private anyMatching(p: Position, b: T[][] = this.boardState): boolean {
     // Reference Vectors
-    const [north, east, south, west] = [
+    const [n, e, s, w]: Position[] = [
       { row: -1, col: 0 },
       { row: 0, col: 1 },
       { row: 1, col: 0 },
       { row: 0, col: -1 },
     ];
 
-    let foundMatch = false;
+    // Get the Reference Piece
+    const ref = this.getFromBoard(p, b);
 
-    if (
-      this.checkNext(board, position, east, referencePiece) +
-        this.checkNext(board, position, west, referencePiece) >=
-      2
-    ) {
-      foundMatch = true;
-    }
+    // Create Booleans for Vertical and Horizontal Matches
+    let matchV = false,
+      matchH = false;
 
-    if (
-      this.checkNext(board, position, north, referencePiece) +
-        this.checkNext(board, position, south, referencePiece) >=
-      2
-    ) {
-      foundMatch = true;
-    }
+    // Check for Matches on the Horizontal axis
+    matchH =
+      1 + this.checkNext(b, p, e, ref) + this.checkNext(b, p, w, ref) >=
+      this.matchLimit;
 
-    // Default Case / No Match Found
-    return foundMatch;
+    // Check for Matches on the Vertical axis
+    matchV =
+      1 + this.checkNext(b, p, n, ref) + this.checkNext(b, p, s, ref) >=
+      this.matchLimit;
+
+    return matchH || matchV;
   }
 
-  private fireMatchEvent() {
-    // Sort the positions by Col and Row values
-    // this.positionsOfMatch.sort((a, b) => {
-    //   if (a.col === b.col) {
-    //     return a.row - b.row;
-    //   }
-    //   return a.col - b.col;
-    // });
+  private checkEntireBoard(): void {
+    // Get all Positions
+    let pos = this.positions();
 
-    // const firstInMatch = this.positionsOfMatch[0];
-    // const reference = this.boardState[firstInMatch.row][firstInMatch.col];
+    // Keep track of positions with matches
+    let hasMatch: Position[] = [];
 
-    // Create Event
-    // const event: BoardEvent<T> = {
-    //   kind: "Match",
-    //   match: { matched: reference, positions: this.positionsOfMatch },
-    // };
-
-    // Fire Event
-    this.listeners.forEach((listener) => {
-      // listener(event);
-      listener({ kind: "Refill" });
+    // Check through positions
+    pos.forEach((p) => {
+      if (this.anyMatching(p)) {
+        hasMatch.push(p);
+      }
     });
 
-    // Remove / Repopulate positions
-    // this.positionsOfMatch.forEach((p) => {
-    //   this.boardState[p.row][p.col] = this.seqGen.next();
-    // });
+    // Get Matches
+    let matches: Position[][] = [];
+
+    hasMatch.forEach((m) => {
+      // Horizontal Axis
+      let positions = this.findMatches(m, "Horiztonal");
+      matches.push(positions);
+
+      // Vertical Axis
+      positions = this.findMatches(m, "Vertical");
+      matches.push(positions);
+    });
+
+    // Filter the Matches so it only contains actual matches
+    matches = matches.filter((m) => m.length >= this.matchLimit);
+
+    // Return if no Matches are found
+    if (matches.length == 0) return;
+
+    // Remove duplicate entries
+    matches = this.cleansePositionDoubleArray(matches);
+
+    //
+    this.fireMatchEvents([...matches]);
+    this.removeMatches(matches);
+    this.refillBoard();
+  }
+
+  private cleansePositionDoubleArray(arr: Position[][]): Position[][] {
+    function contains(a: Position[], ref: Position): boolean {
+      let copy = a.slice();
+      let count = 0;
+      copy.forEach(
+        (pos) => (count += ref.col == pos.col && ref.row == pos.row ? 1 : 0)
+      );
+      return count > 0;
+    }
+
+    function equals(a: Position[], b: Position[]): boolean {
+      // Length not the same
+      if (a.length != b.length) return false;
+
+      // Check if B contains all positions in A
+      for (let ref of a) {
+        // return False if B doesn't include all
+        if (!contains(b, ref)) return false;
+      }
+
+      return true;
+    }
+
+    let tmp: Position[][] = arr.slice(0, 1);
+
+    // Sort all Arrays
+    arr.forEach((a) => this.sortPositionArray(a));
+
+    while (arr.length > 0) {
+      // Get the next Column
+      let toCheck = arr.shift();
+      let newEntry = true;
+
+      // Compare with all columns in tmp
+      for (const col of tmp) {
+        if (equals(col, toCheck)) newEntry = false;
+      }
+
+      // Add if entry is new
+      if (newEntry) tmp.push(toCheck);
+    }
+
+    return tmp;
+  }
+
+  private sortPositionArray(arr: Position[]): void {
+    arr.sort((a, b) => {
+      if (a.col === b.col) {
+        return a.row - b.row;
+      }
+      return a.col - b.col;
+    });
+  }
+
+  /**
+   * Retrieve a Piece from the Board
+   *
+   * @param pos Position to retrieve a Piece from
+   * @param board Board to retrieve a Piece from
+   * @returns `undefined` if Piece is Out Of Bounds, or doesn't exist. Piece of type `<T>` otherwise
+   */
+  private getFromBoard(pos: Position, board: T[][] = this.boardState) {
+    // Check if Out Of Bounds
+    const OOB =
+      0 > pos.col ||
+      pos.col >= this.width ||
+      0 > pos.row ||
+      pos.row >= this.height;
+
+    // Return Undefined if OOB, otherwise the Piece at position
+    return OOB ? undefined : board[pos.col][pos.row];
   }
 
   private checkNext(
@@ -216,12 +352,12 @@ export class Board<T> {
   ): number {
     // Calculate the next position
     const newPos: Position = {
-      row: currentPosition.row + direction.row,
       col: currentPosition.col + direction.col,
+      row: currentPosition.row + direction.row,
     };
 
     // Get the Piece
-    const piece = this.getPieceFromBoard(board, newPos);
+    const piece = this.getFromBoard(newPos, board);
 
     // Check if Piece is the correct Piece
     if (piece == reference) {
@@ -232,34 +368,154 @@ export class Board<T> {
     }
   }
 
-  private simulateSwap(first: Position, second: Position): T[][] {
+  private getNext(
+    board: T[][],
+    currentPosition: Position,
+    direction: Position,
+    reference: T,
+    trackArray: Set<Position>
+  ) {
+    // Calculate the next position
+    const newPos: Position = {
+      col: currentPosition.col + direction.col,
+      row: currentPosition.row + direction.row,
+    };
+
+    // Get the Piece
+    const piece = this.getFromBoard(newPos, board);
+
+    // Check if Piece is the correct Piece
+    if (piece == reference) {
+      // Recursion
+      this.getNext(board, newPos, direction, reference, trackArray);
+    }
+
+    // Add current position to the Tracking Array
+    trackArray.add(currentPosition);
+  }
+
+  private simulateSwap(
+    first: Position,
+    second: Position,
+    board: T[][] = this.boardState
+  ): T[][] {
     // Copy Board
-    let copy = this.boardState.map((arr) => arr.slice());
+    let copy = board.map((arr) => arr.slice());
     let new_first = this.piece(second);
     let new_second = this.piece(first);
 
     // Swap
-    copy[first.row][first.col] = new_first;
-    copy[second.row][second.col] = new_second;
+    copy[first.col][first.row] = new_first;
+    copy[second.col][second.row] = new_second;
 
     // Return Copy
     return copy;
   }
 
-  // From OLE
-  move(first: Position, second: Position) {
-    // Return if not allowed
-    if (!this.canMove(first, second)) return;
+  private findMatches(
+    p: Position,
+    direction: "Horiztonal" | "Vertical" // | "Both"
+  ): Position[] {
+    // Reference Vectors
+    const [n, e, s, w]: Position[] = [
+      { row: -1, col: 0 },
+      { row: 0, col: 1 },
+      { row: 1, col: 0 },
+      { row: 0, col: -1 },
+    ];
 
-    // var matches = getMatches(first)
-    // var matches = getMatches(second)
+    const b = this.boardState;
 
-    // Get temporary piece for Swap
-    let temp = this.piece(first);
-    this.boardState[first.row][first.col] = this.piece(second);
-    this.boardState[second.row][second.col] = temp;
+    // Get the Reference Piece
+    const ref = this.getFromBoard(p, b);
 
-    // Fire Match Event
-    // this.fireMatchEvent();
+    // Tracking Arrays
+    var trackH: Set<Position> = new Set();
+    var trackV: Set<Position> = new Set();
+
+    // Check for Matches on the Horizontal axis
+    this.getNext(b, p, e, ref, trackH);
+    this.getNext(b, p, w, ref, trackH);
+
+    // Check for Matches on the Vertical axis
+    this.getNext(b, p, n, ref, trackV);
+    this.getNext(b, p, s, ref, trackV);
+
+    // Return requested Array
+    switch (direction) {
+      case "Horiztonal":
+        return [...trackH];
+      case "Vertical":
+        return [...trackV];
+      // case "Both":
+      default:
+      // return {V: [...trackV], H: [...trackH] };
+    }
+  }
+
+  /**
+   * Filters the Lists of Matches to and then fires events for those of length high enough for the Match Limit
+   *
+   * @param matches Lists of Matches
+   */
+  private fireMatchEvents(matches: Position[][]) {
+    if (matches.length == 0) return;
+
+    matches
+      .filter((m) => m.length >= this.matchLimit)
+      .forEach((m) => this.fireMatchEvent(m));
+  }
+
+  private fireMatchEvent(positions: Position[]) {
+    // Sort the positions by Col and Row values
+    this.sortPositionArray(positions);
+
+    // Get Reference Piece from first position
+    const pos_0 = positions[0];
+    const ref = this.boardState[pos_0.col][pos_0.row];
+
+    // Create Event
+    const event: BoardEvent<T> = {
+      kind: "Match",
+      match: { matched: ref, positions: positions },
+    };
+
+    const refill: BoardEvent<T> = { kind: "Refill" };
+
+    // Fire Event
+    this.listeners.forEach((l) => {
+      l(event);
+      l(refill);
+    });
+  }
+
+  private refillBoard() {
+    // Loop through columns by removing the first column, and adding it back on the end
+    for (let i = 0; i < this.boardState.length; i++) {
+      // Get cleaned column
+      let column = this.boardState.shift();
+      column = column.filter(Boolean);
+
+      // Fill column
+      const missing = this.height - column.length;
+      for (let i = missing; i > 0; i--) {
+        column.unshift(undefined);
+      }
+
+      // Add back column
+      this.boardState.push(column);
+    }
+
+    // Add Pieces back
+    this.populateBoard(true);
+    this.checkEntireBoard();
+  }
+
+  private removeMatches(matches: Position[][]) {
+    matches
+      .filter((m) => m.length >= this.matchLimit)
+      .forEach((m) =>
+        m.forEach((m) => (this.boardState[m.col][m.row] = undefined))
+      );
   }
 }

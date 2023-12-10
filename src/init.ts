@@ -20,8 +20,8 @@ class SequenceGenerator implements Generator<string> {
 }
 
 async function init() {
-    const generator = new SequenceGenerator("ABA")
-    const board = new Board<String>(generator, 4, 3)
+    const generator = new SequenceGenerator("ABACAAAB")
+    const board = new Board<String>(generator, 7, 7)
     const model = new Model<String>(board)
     const controller = new Controller<String>(model)
     const view = new View(window, controller)
